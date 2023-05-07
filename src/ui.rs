@@ -44,7 +44,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     }
 }
 
-fn draw_tx<B: Backend>(f: &mut Frame<B>, app: &App, rect: Rect) {
+fn draw_tx<B: Backend>(f: &mut Frame<B>, app: &mut App, rect: Rect) {
     let block = Block::default()
         .title("TX")
         .borders(Borders::all())
@@ -54,9 +54,10 @@ fn draw_tx<B: Backend>(f: &mut Frame<B>, app: &App, rect: Rect) {
             BorderType::Plain
         });
     let inner = block.inner(rect);
-    let txt = Paragraph::new(app.tx_out.as_str())
+    let tx = app.tx.with_cursor(app.cursor());
+    let txt = Paragraph::new(tx.as_ref())
         .block(block)
-        .scroll((scroll_amount(&app.tx_out, inner), 0))
+        .scroll((scroll_amount(tx.as_ref(), inner), 0))
         .wrap(Wrap { trim: false });
 
     f.render_widget(txt, rect);

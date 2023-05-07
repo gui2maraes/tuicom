@@ -1,4 +1,5 @@
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use crate::tx::Tx;
+use crossterm::event::{Event, KeyCode, KeyEvent};
 use serialport::SerialPort;
 use std::fmt::Write;
 use std::io;
@@ -40,11 +41,9 @@ impl Mode {
 
 pub struct App {
     pub serial: Box<dyn SerialPort>,
-    pub tx_out: String,
-    pub tx_scroll: u16,
+    pub tx: Tx,
     pub rx_buf: Vec<u8>,
     pub rx_out: String,
-    pub rx_scroll: u16,
     pub is_hex: bool,
     pub connected: bool,
     pub mode: Mode,
@@ -55,11 +54,9 @@ impl App {
     pub fn new(serial: Box<dyn SerialPort>) -> Self {
         Self {
             serial,
-            tx_out: String::new(),
-            tx_scroll: 0,
+            tx: Tx::new(),
             rx_buf: Vec::new(),
             rx_out: String::new(),
-            rx_scroll: 0,
             is_hex: false,
             connected: true,
             mode: Mode::Normal,
@@ -79,7 +76,7 @@ impl App {
             }
         }
         self.get_data()?;
-        self.update_cursor(key_pressed);
+        self.cursor.update(key_pressed);
         Ok(ctl)
     }
     fn handle_key(&mut self, key: KeyEvent) -> Result<Control, io::Error> {
@@ -87,15 +84,16 @@ impl App {
         match self.mode {
             Mode::Insert => match key.code {
                 K::Esc => self.leave_insert(),
-                K::Char(c) => self.send_char(c)?,
-                K::Tab => self.send_char_but_show('\t', "    ")?,
-                K::Enter => self.send_char('\n')?,
+                K::Char(c) => self.tx.send(c, self.serial.as_mut())?,
+                K::Tab => self.tx.send_but_show('\t', "    ", self.serial.as_mut())?,
+                K::Enter => self.tx.send('\n', self.serial.as_mut())?,
                 _ => (),
             },
             Mode::Normal => match key.code {
                 K::Esc | KeyCode::Char('q') => self.mode = Mode::WannaQuit,
                 K::Char('i') => self.enter_insert(),
-                K::Char('h') => self.switch_hex(),
+                K::Char('h') => self.switch_rx_hex(),
+                K::Char('H') => self.tx.switch_hex(),
                 _ => (),
             },
             Mode::WannaQuit => match key.code {
@@ -108,7 +106,7 @@ impl App {
         Ok(Control::Continue)
     }
 
-    pub fn switch_hex(&mut self) {
+    pub fn switch_rx_hex(&mut self) {
         self.is_hex = !self.is_hex;
         self.rx_out.clear();
         if self.is_hex {
@@ -128,21 +126,6 @@ impl App {
     pub fn leave_insert(&mut self) {
         self.mode = Mode::Normal;
         self.cursor = Cursor::normal();
-    }
-    pub fn send_char(&mut self, c: char) -> Result<(), io::Error> {
-        let mut buf = [0; 4];
-        let bytes = c.encode_utf8(&mut buf).as_bytes();
-        self.serial.write_all(bytes)?;
-        self.tx_push_char(c);
-        Ok(())
-    }
-    pub fn send_char_but_show(&mut self, c: char, show: &str) -> Result<(), io::Error> {
-        let mut buf = [0; 4];
-        let bytes = c.encode_utf8(&mut buf).as_bytes();
-        self.serial.write_all(bytes)?;
-        self.tx_push_str(show);
-
-        Ok(())
     }
     pub fn get_data(&mut self) -> Result<(), io::Error> {
         use serialport::ErrorKind;
@@ -168,21 +151,8 @@ impl App {
         }
         Ok(())
     }
-    fn update_cursor(&mut self, key_pressed: bool) {
-        self.cursor.update(key_pressed);
-        self.tx_out.pop();
-        self.tx_out.push(self.cursor.cursor());
-    }
-
-    fn tx_push_char(&mut self, c: char) {
-        self.tx_out.pop();
-        self.tx_out.push(c);
-        self.tx_out.push(self.cursor.cursor());
-    }
-    fn tx_push_str(&mut self, s: &str) {
-        self.tx_out.pop();
-        self.tx_out.push_str(s);
-        self.tx_out.push(self.cursor.cursor());
+    pub fn cursor(&self) -> char {
+        self.cursor.cursor()
     }
 }
 
