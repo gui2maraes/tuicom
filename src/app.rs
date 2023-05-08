@@ -1,7 +1,6 @@
-use crate::tx::Tx;
+use crate::screen::{Rx, Tx};
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use serialport::SerialPort;
-use std::fmt::Write;
 use std::io;
 use std::time::{Duration, Instant};
 
@@ -42,10 +41,7 @@ impl Mode {
 pub struct App {
     pub serial: Box<dyn SerialPort>,
     pub tx: Tx,
-    pub rx_buf: Vec<u8>,
-    pub rx_out: String,
-    pub is_hex: bool,
-    pub connected: bool,
+    pub rx: Rx,
     pub mode: Mode,
     cursor: Cursor,
 }
@@ -55,10 +51,7 @@ impl App {
         Self {
             serial,
             tx: Tx::new(),
-            rx_buf: Vec::new(),
-            rx_out: String::new(),
-            is_hex: false,
-            connected: true,
+            rx: Rx::new(),
             mode: Mode::Normal,
             cursor: Cursor::Normal,
         }
@@ -75,7 +68,7 @@ impl App {
                 _ => (),
             }
         }
-        self.get_data()?;
+        self.rx.recv(self.serial.as_mut())?;
         self.cursor.update(key_pressed);
         Ok(ctl)
     }
@@ -84,16 +77,21 @@ impl App {
         match self.mode {
             Mode::Insert => match key.code {
                 K::Esc => self.leave_insert(),
-                K::Char(c) => self.tx.send(c, self.serial.as_mut())?,
-                K::Tab => self.tx.send_but_show('\t', "    ", self.serial.as_mut())?,
-                K::Enter => self.tx.send('\n', self.serial.as_mut())?,
+                K::Char(c) => {
+                    let mut buf = [0; 4];
+                    for &b in c.encode_utf8(&mut buf).as_bytes() {
+                        self.tx.send(b, self.serial.as_mut())?;
+                    }
+                }
+                K::Tab => self.tx.send(b'\t', self.serial.as_mut())?,
+                K::Enter => self.tx.send(b'\n', self.serial.as_mut())?,
                 _ => (),
             },
             Mode::Normal => match key.code {
                 K::Esc | KeyCode::Char('q') => self.mode = Mode::WannaQuit,
                 K::Char('i') => self.enter_insert(),
-                K::Char('h') => self.switch_rx_hex(),
-                K::Char('H') => self.tx.switch_hex(),
+                K::Char('h') => self.rx.display.switch_hex(),
+                K::Char('H') => self.tx.display.switch_hex(),
                 _ => (),
             },
             Mode::WannaQuit => match key.code {
@@ -106,19 +104,6 @@ impl App {
         Ok(Control::Continue)
     }
 
-    pub fn switch_rx_hex(&mut self) {
-        self.is_hex = !self.is_hex;
-        self.rx_out.clear();
-        if self.is_hex {
-            for &b in &self.rx_buf {
-                push_hex(&mut self.rx_out, b);
-            }
-        } else {
-            for &b in &self.rx_buf {
-                push_ascii(&mut self.rx_out, b);
-            }
-        }
-    }
     pub fn enter_insert(&mut self) {
         self.mode = Mode::Insert;
         self.cursor = Cursor::insert();
@@ -127,43 +112,8 @@ impl App {
         self.mode = Mode::Normal;
         self.cursor = Cursor::normal();
     }
-    pub fn get_data(&mut self) -> Result<(), io::Error> {
-        use serialport::ErrorKind;
-        let bytes = match self.serial.bytes_to_read() {
-            Ok(b) => b as usize,
-            Err(err) if err.kind() == ErrorKind::NoDevice => {
-                self.connected = false;
-                return Ok(());
-            }
-            Err(err) => return Err(err.into()),
-        };
-        let len = self.rx_buf.len();
-        self.rx_buf.resize(len + bytes, 0);
-        self.serial.read_exact(&mut self.rx_buf[len..])?;
-        if self.is_hex {
-            for &b in &self.rx_buf[len..] {
-                push_hex(&mut self.rx_out, b);
-            }
-        } else {
-            for &b in &self.rx_buf[len..] {
-                push_ascii(&mut self.rx_out, b);
-            }
-        }
-        Ok(())
-    }
     pub fn cursor(&self) -> char {
         self.cursor.cursor()
-    }
-}
-
-fn push_hex(s: &mut String, byte: u8) {
-    write!(s, "{byte:02X} ").unwrap();
-}
-fn push_ascii(s: &mut String, byte: u8) {
-    if byte == b'\t' {
-        s.push_str("    ");
-    } else {
-        s.push(byte.into());
     }
 }
 

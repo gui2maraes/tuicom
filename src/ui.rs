@@ -63,13 +63,14 @@ fn draw_tx<B: Backend>(f: &mut Frame<B>, app: &mut App, rect: Rect) {
     f.render_widget(txt, rect);
 }
 
-fn draw_rx<B: Backend>(f: &mut Frame<B>, app: &App, rect: Rect) {
+fn draw_rx<B: Backend>(f: &mut Frame<B>, app: &mut App, rect: Rect) {
     let block = Block::default().title("RX").borders(Borders::all());
     let inner = block.inner(rect);
 
-    let txt = Paragraph::new(app.rx_out.as_ref())
+    let rx = app.rx.with_cursor(app.cursor());
+    let txt = Paragraph::new(rx.as_ref())
         .block(block)
-        .scroll((0, scroll_amount(&app.rx_out, inner)))
+        .scroll((scroll_amount(rx.as_ref(), inner), 0))
         .wrap(Wrap { trim: false });
     f.render_widget(txt, rect);
 }

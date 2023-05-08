@@ -1,8 +1,8 @@
 pub mod app;
 pub mod args;
 pub mod config;
+pub mod screen;
 pub mod theme;
-pub mod tx;
 pub mod ui;
 
 use app::App;
