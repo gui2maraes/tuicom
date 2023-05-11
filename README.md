@@ -5,7 +5,7 @@ A `tui` based serial terminal written in Rust.
 ## Features
 - Baud rate and port selection
 - Separate TX and RX consoles
-- View RX as hex
+- View TX and RX as hex
 - More to come
 
 ## Bindings

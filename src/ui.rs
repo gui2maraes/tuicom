@@ -5,14 +5,8 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
-    widgets::{
-        canvas::{Canvas, Line, Map, MapResolution, Rectangle},
-        Clear,
-    },
-    widgets::{
-        Axis, BarChart, Block, BorderType, Borders, Cell, Chart, Dataset, Gauge, LineGauge, List,
-        ListItem, Paragraph, Row, Sparkline, Table, Tabs, Wrap,
-    },
+    widgets::Clear,
+    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
     Frame,
 };
 
@@ -48,7 +42,7 @@ fn draw_tx<B: Backend>(f: &mut Frame<B>, app: &mut App, rect: Rect) {
     let block = Block::default()
         .title("TX")
         .borders(Borders::all())
-        .border_type(if app.mode.insert() {
+        .border_type(if app.mode.is_insert() {
             BorderType::Thick
         } else {
             BorderType::Plain
@@ -76,38 +70,59 @@ fn draw_rx<B: Backend>(f: &mut Frame<B>, app: &mut App, rect: Rect) {
 }
 
 fn draw_status<B: Backend>(f: &mut Frame<B>, app: &App, rect: Rect) {
-    let port_name = app.serial.name().unwrap_or_else(|| String::from("Serial"));
+    let mut port_style = Style::default();
+
+    let port_name = if app.is_connected() {
+        port_style = port_style.fg(Color::Green);
+        app.serial.name().unwrap_or_else(|| String::from("serial"))
+    } else {
+        port_style = port_style.fg(Color::Red);
+        String::from("disconnected")
+    };
+
     let baud_rate = app
         .serial
         .baud_rate()
         .map(|b| b.to_string())
         .unwrap_or_else(|_| String::from("<baud>"));
-    let mode = if app.mode.insert() {
+    let mode = if app.mode.is_insert() {
         "INSERT"
     } else {
         "NORMAL"
     };
+    let crlf = if app.tx.lf_crlf { "CR + LF" } else { "LF" };
     let spans = Spans::from(vec![
         Span::styled(mode, Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(" | "),
-        Span::styled(port_name, Style::default().add_modifier(Modifier::BOLD)),
+        Span::styled(port_name, port_style.add_modifier(Modifier::BOLD)),
         Span::raw(" | "),
         Span::styled(baud_rate, Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(" | "),
+        Span::styled(crlf, Style::default().add_modifier(Modifier::BOLD)),
     ]);
     let p = Paragraph::new(spans).style(Style::default().bg(Color::DarkGray));
     f.render_widget(p, rect);
 }
 
+static BINDINGS: &[(&str, &str)] = &[
+    ("q", "quit"),
+    ("H", "hex input"),
+    ("h", "hex output"),
+    ("C", "clear input"),
+    ("c", "clear output"),
+    ("l", "map LF to CR + LF"),
+    ("i", "insert mode"),
+    ("ESC", "normal mode"),
+];
 fn draw_bindings<B: Backend>(f: &mut Frame<B>, rect: Rect) {
-    use crate::config::BINDINGS;
     let spans = Spans::from(
         BINDINGS
-            .entries()
-            .map(|(&key, &action)| {
+            .iter()
+            .map(|(key, action)| {
                 [
-                    Span::styled(key, Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled(*key, Style::default().add_modifier(Modifier::BOLD)),
                     Span::raw(": "),
-                    Span::raw(action),
+                    Span::raw(*action),
                 ]
             })
             .intersperse([Span::raw(" "), Span::raw("|"), Span::raw(" ")])

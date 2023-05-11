@@ -24,13 +24,13 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub fn insert(self) -> bool {
+    pub fn is_insert(self) -> bool {
         matches!(self, Self::Insert)
     }
-    pub fn normal(self) -> bool {
+    pub fn is_normal(self) -> bool {
         matches!(self, Self::Normal)
     }
-    pub fn config(self) -> bool {
+    pub fn is_config(self) -> bool {
         matches!(self, Self::Config)
     }
     pub fn wanna_quit(self) -> bool {
@@ -44,6 +44,7 @@ pub struct App {
     pub rx: Rx,
     pub mode: Mode,
     cursor: Cursor,
+    connected: bool,
 }
 
 impl App {
@@ -54,6 +55,7 @@ impl App {
             rx: Rx::new(),
             mode: Mode::Normal,
             cursor: Cursor::Normal,
+            connected: true,
         }
     }
     pub fn update(&mut self, event: Option<Event>) -> Result<Control, io::Error> {
@@ -62,15 +64,18 @@ impl App {
         if let Some(e) = event {
             match e {
                 Event::Key(k) => {
-                    ctl = self.handle_key(k)?;
+                    ctl = is_connected(self.handle_key(k), &mut self.connected)?;
                     key_pressed = true
                 }
                 _ => (),
             }
         }
-        self.rx.recv(self.serial.as_mut())?;
+        is_connected(self.rx.recv(self.serial.as_mut()), &mut self.connected)?;
         self.cursor.update(key_pressed);
         Ok(ctl)
+    }
+    pub fn is_connected(&self) -> bool {
+        self.connected
     }
     fn handle_key(&mut self, key: KeyEvent) -> Result<Control, io::Error> {
         use KeyCode as K;
@@ -92,6 +97,10 @@ impl App {
                 K::Char('i') => self.enter_insert(),
                 K::Char('h') => self.rx.display.switch_hex(),
                 K::Char('H') => self.tx.display.switch_hex(),
+                K::Char('l') => self.tx.lf_crlf = !self.tx.lf_crlf,
+                K::Char('c') => self.rx.display.clear(),
+                K::Char('C') => self.tx.display.clear(),
+
                 _ => (),
             },
             Mode::WannaQuit => match key.code {
@@ -115,6 +124,14 @@ impl App {
     pub fn cursor(&self) -> char {
         self.cursor.cursor()
     }
+}
+
+fn is_connected<T>(res: io::Result<T>, connected: &mut bool) -> io::Result<T> {
+    match &res {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => *connected = false,
+        _ => *connected = true,
+    }
+    res
 }
 
 enum Cursor {

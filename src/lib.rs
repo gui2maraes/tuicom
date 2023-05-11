@@ -1,14 +1,13 @@
 pub mod app;
 pub mod args;
-pub mod config;
+pub mod dummy;
 pub mod screen;
-pub mod theme;
 pub mod ui;
 
 use app::App;
 use args::Args;
 use std::io;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use ratatui::{
     backend::{Backend, CrosstermBackend},
@@ -16,7 +15,7 @@ use ratatui::{
 };
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{self, DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -35,23 +34,18 @@ type Result<T> = std::result::Result<T, Error>;
 pub fn run_app() -> Result<()> {
     let args: Args = argh::from_env();
 
-    let port = serialport::new(&args.port, args.baud)
-        .timeout(Duration::from_millis(500))
-        .open()?;
+    let port = if args.port == "dummy" {
+        Box::new(dummy::DummySerial::new(args.baud))
+    } else {
+        serialport::new(&args.port, args.baud)
+            .timeout(Duration::from_millis(500))
+            .open()?
+    };
 
     let mut terminal = start_tui()?;
     let mut app = App::new(port);
-    let mut last_instant = Instant::now();
-    let mut cursor_timer = Duration::ZERO;
 
     loop {
-        let now = Instant::now();
-        cursor_timer += now - last_instant;
-        last_instant = now;
-        if cursor_timer.as_millis() > 500 {
-            cursor_timer -= Duration::from_millis(500);
-            //app.switch_cursor();
-        }
         let ev = if event::poll(Duration::from_millis(1000 / 60))? {
             Some(event::read()?)
         } else {

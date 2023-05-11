@@ -2,11 +2,13 @@ use serialport::SerialPort;
 use std::io;
 pub struct Tx {
     pub display: Display,
+    pub lf_crlf: bool,
 }
 impl Tx {
     pub fn new() -> Self {
         Self {
             display: Display::new(),
+            lf_crlf: false,
         }
     }
     pub fn with_cursor<'a>(&'a mut self, cursor: char) -> WithCursor<'a> {
@@ -14,7 +16,12 @@ impl Tx {
     }
     pub fn send(&mut self, ch: u8, port: &mut dyn SerialPort) -> Result<(), io::Error> {
         let Some(c) = self.display.push_char(ch) else {return Ok(())};
-        let res = port.write_all(&[c]);
+
+        let res = if self.lf_crlf && c == b'\n' {
+            port.write_all(b"\n\r")
+        } else {
+            port.write_all(&[c])
+        };
         if let Err(_) = &res {
             self.display.pop();
         }
@@ -62,6 +69,11 @@ impl Display {
             show: String::new(),
             display_mode: DisplayMode::Ascii,
         }
+    }
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+        self.show.clear();
+        self.display_mode.clear();
     }
     pub fn switch_hex(&mut self) {
         self.display_mode = match self.display_mode {
@@ -148,6 +160,15 @@ enum DisplayMode {
     Hex(ByteBuffer),
 }
 
+impl DisplayMode {
+    fn clear(&mut self) {
+        if let DisplayMode::Hex(b) = self {
+            b.buf = None;
+        }
+    }
+}
+
+/// Struct for buffering nibbles to output bytes
 #[derive(Debug, Clone, Copy)]
 struct ByteBuffer {
     buf: Option<u8>,
