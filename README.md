@@ -18,3 +18,21 @@ A `tui` based serial terminal written in Rust.
 - `b`: Change baud rate
 - `i`: Enter INSERT mode
 - `Esc`: Enter NORMAL mode
+
+## Building
+
+Just run `cargo install --path .`.
+
+### Dependencies
+
+For GNU/Linux pkg-config headers are required:
+
+- Ubuntu: `sudo apt install pkg-config`
+- Fedora: `sudo dnf install pkgconf-pkg-config`
+
+For other distros they may provide pkg-config through the pkgconf package instead.
+
+For GNU/Linux libudev headers are required as well:
+
+- Ubuntu: `sudo apt install libudev-dev`
+- Fedora: `sudo dnf install systemd-devel`
