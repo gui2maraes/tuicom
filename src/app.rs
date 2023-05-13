@@ -45,7 +45,6 @@ pub struct App {
     pub rx: Rx,
     pub mode: Mode,
     cursor: Cursor,
-    connected: bool,
 }
 
 impl App {
@@ -56,7 +55,6 @@ impl App {
             rx: Rx::new(),
             mode: Mode::Normal,
             cursor: Cursor::Normal,
-            connected: true,
         }
     }
     pub fn update(&mut self, event: Option<Event>) -> Result<Control, io::Error> {
@@ -65,23 +63,15 @@ impl App {
         if let Some(e) = event {
             match e {
                 Event::Key(k) => {
-                    ctl = is_connected(self.handle_key(k), &mut self.connected)?;
+                    ctl = self.handle_key(k)?;
                     key_pressed = true
                 }
                 _ => (),
             }
         }
-        is_connected(
-            self.rx
-                .recv(self.serial.as_mut())
-                .map(|_| Control::Continue),
-            &mut self.connected,
-        )?;
+        self.rx.recv(self.serial.as_mut())?;
         self.cursor.update(key_pressed);
         Ok(ctl)
-    }
-    pub fn is_connected(&self) -> bool {
-        self.connected
     }
     fn handle_key(&mut self, key: KeyEvent) -> Result<Control, io::Error> {
         use KeyCode as K;
@@ -142,16 +132,6 @@ impl App {
     }
     pub fn cursor(&self) -> char {
         self.cursor.cursor()
-    }
-}
-
-fn is_connected(res: io::Result<Control>, connected: &mut bool) -> io::Result<Control> {
-    match res {
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            *connected = false;
-            return Ok(Control::Continue);
-        }
-        res => res,
     }
 }
 

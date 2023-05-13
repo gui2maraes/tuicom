@@ -82,15 +82,8 @@ fn draw_rx<B: Backend>(f: &mut Frame<B>, app: &mut App, rect: Rect) {
 }
 
 fn draw_status<B: Backend>(f: &mut Frame<B>, app: &App, rect: Rect) {
-    let mut port_style = Style::default();
-
-    let port_name = if app.is_connected() {
-        port_style = port_style.fg(Color::Green);
-        app.serial.name().unwrap_or_else(|| String::from("serial"))
-    } else {
-        port_style = port_style.fg(Color::Red);
-        String::from("disconnected")
-    };
+    let bold = Style::default().add_modifier(Modifier::BOLD);
+    let port_name = app.serial.name().unwrap_or_else(|| String::from("serial"));
 
     let baud_rate = app
         .serial
@@ -104,13 +97,13 @@ fn draw_status<B: Backend>(f: &mut Frame<B>, app: &App, rect: Rect) {
     };
     let crlf = if app.tx.lf_crlf { "CR + LF" } else { "LF" };
     let spans = Spans::from(vec![
-        Span::styled(mode, Style::default().add_modifier(Modifier::BOLD)),
+        Span::styled(mode, bold),
         Span::raw(" | "),
-        Span::styled(port_name, port_style.add_modifier(Modifier::BOLD)),
+        Span::styled(port_name, bold),
         Span::raw(" | "),
-        Span::styled(baud_rate, Style::default().add_modifier(Modifier::BOLD)),
+        Span::styled(baud_rate, bold),
         Span::raw(" | "),
-        Span::styled(crlf, Style::default().add_modifier(Modifier::BOLD)),
+        Span::styled(crlf, bold),
     ]);
     let p = Paragraph::new(spans).style(Style::default().bg(Color::DarkGray));
     f.render_widget(p, rect);
@@ -118,10 +111,10 @@ fn draw_status<B: Backend>(f: &mut Frame<B>, app: &App, rect: Rect) {
 
 static BINDINGS: &[(&str, &str)] = &[
     ("q", "quit"),
-    ("H", "hex input"),
-    ("h", "hex output"),
-    ("C", "clear input"),
-    ("c", "clear output"),
+    ("H", "TX hex"),
+    ("h", "RX hex"),
+    ("C", "clear TX"),
+    ("c", "clear RX"),
     ("l", "map LF to CR + LF"),
     ("b", "change baud rate"),
     ("i", "insert mode"),
