@@ -1,5 +1,7 @@
 use serialport::SerialPort;
 use std::io;
+
+/// TX console
 pub struct Tx {
     pub display: Display,
     pub lf_crlf: bool,
@@ -14,11 +16,23 @@ impl Tx {
     pub fn with_cursor<'a>(&'a mut self, cursor: char) -> WithCursor<'a> {
         WithCursor::new(&mut self.display.show, cursor)
     }
+    pub fn is_hex(&self) -> bool {
+        match &self.display.display_mode {
+            DisplayMode::Ascii => false,
+            DisplayMode::Hex(_) => true,
+        }
+    }
+    pub fn is_ascii(&self) -> bool {
+        match &self.display.display_mode {
+            DisplayMode::Ascii => true,
+            DisplayMode::Hex(_) => false,
+        }
+    }
     pub fn send(&mut self, ch: u8, port: &mut dyn SerialPort) -> Result<(), io::Error> {
         let Some(c) = self.display.push_char(ch) else {return Ok(())};
 
         let res = if self.lf_crlf && c == b'\n' {
-            port.write_all(b"\n\r")
+            port.write_all(b"\r\n")
         } else {
             port.write_all(&[c])
         };
@@ -29,6 +43,7 @@ impl Tx {
     }
 }
 
+/// RX console
 pub struct Rx {
     pub display: Display,
     recv_buf: Vec<u8>,
@@ -39,6 +54,18 @@ impl Rx {
         Self {
             display: Display::new(),
             recv_buf: Vec::new(),
+        }
+    }
+    pub fn is_hex(&self) -> bool {
+        match &self.display.display_mode {
+            DisplayMode::Ascii => false,
+            DisplayMode::Hex(_) => true,
+        }
+    }
+    pub fn is_ascii(&self) -> bool {
+        match &self.display.display_mode {
+            DisplayMode::Ascii => true,
+            DisplayMode::Hex(_) => false,
         }
     }
     pub fn with_cursor<'a>(&'a mut self, cursor: char) -> WithCursor<'a> {
@@ -105,7 +132,7 @@ impl Display {
         }
         self.buffer.pop()
     }
-    // pushes and ASCII digit to buffer and display, accounting for HEX mode
+    /// pushes an ASCII digit to buffer and display, accounting for HEX mode
     pub fn push_char(&mut self, ch: u8) -> Option<u8> {
         let mut out = None;
         match &mut self.display_mode {
@@ -115,6 +142,7 @@ impl Display {
                 out = Some(ch);
             }
             DisplayMode::Hex(byte_buf) => {
+                // only display if is valid number
                 if let Some(c) = (ch as char).to_digit(16) {
                     let mut complete = false;
                     if let Some(b) = byte_buf.push(c as u8) {
@@ -185,6 +213,7 @@ impl ByteBuffer {
     }
 }
 
+/// Helper struct to add cursor only when rendering
 pub struct WithCursor<'a> {
     s: &'a mut String,
 }

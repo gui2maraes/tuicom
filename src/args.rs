@@ -8,6 +8,6 @@ pub struct Args {
     pub baud: u32,
 
     /// serial port to connect to
-    #[argh(option, short = 'p')]
+    #[argh(positional)]
     pub port: String,
 }

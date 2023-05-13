@@ -1,4 +1,4 @@
-use crate::app::App;
+use crate::app::{App, Mode};
 use itertools::Itertools;
 use ratatui::{
     backend::Backend,
@@ -16,7 +16,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .constraints([
             Constraint::Percentage(48),
             Constraint::Percentage(48),
-            Constraint::Length(1),
+            Constraint::Min(1),
             Constraint::Length(1),
         ])
         .split(f.size());
@@ -33,14 +33,21 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     // status line
     draw_status(f, app, chunks[3]);
 
-    if app.mode.wanna_quit() {
-        draw_quit_popup(f);
-    }
+    match &app.mode {
+        Mode::WannaQuit => draw_quit_popup(f),
+        Mode::BaudInput(s) => draw_baud_popup(f, s),
+        _ => (),
+    };
 }
 
 fn draw_tx<B: Backend>(f: &mut Frame<B>, app: &mut App, rect: Rect) {
+    let title = if app.tx.is_ascii() {
+        "[TX]"
+    } else {
+        "[TX - Hex]"
+    };
     let block = Block::default()
-        .title("TX")
+        .title(title)
         .borders(Borders::all())
         .border_type(if app.mode.is_insert() {
             BorderType::Thick
@@ -58,7 +65,12 @@ fn draw_tx<B: Backend>(f: &mut Frame<B>, app: &mut App, rect: Rect) {
 }
 
 fn draw_rx<B: Backend>(f: &mut Frame<B>, app: &mut App, rect: Rect) {
-    let block = Block::default().title("RX").borders(Borders::all());
+    let title = if app.rx.is_ascii() {
+        "[RX]"
+    } else {
+        "[RX - Hex]"
+    };
+    let block = Block::default().title(title).borders(Borders::all());
     let inner = block.inner(rect);
 
     let rx = app.rx.with_cursor(app.cursor());
@@ -111,6 +123,7 @@ static BINDINGS: &[(&str, &str)] = &[
     ("C", "clear input"),
     ("c", "clear output"),
     ("l", "map LF to CR + LF"),
+    ("b", "change baud rate"),
     ("i", "insert mode"),
     ("ESC", "normal mode"),
 ];
@@ -139,6 +152,20 @@ fn draw_quit_popup<B: Backend>(f: &mut Frame<B>) {
     let txt = Paragraph::new("Are you sure you want to quit (y/n)?")
         .block(block)
         .wrap(Wrap { trim: true });
+    f.render_widget(Clear, area);
+    f.render_widget(txt, area);
+}
+
+fn draw_baud_popup<B: Backend>(f: &mut Frame<B>, baud_input: &str) {
+    use ratatui::symbols::block::SEVEN_EIGHTHS as cursor;
+    let block = Block::default().title("Baud Rate").borders(Borders::all());
+    let area = centered_rect(20, 20, f.size());
+    let spans = Spans::from(vec![
+        Span::raw("Baud rate: "),
+        Span::raw(baud_input),
+        Span::styled(cursor, Style::default().add_modifier(Modifier::SLOW_BLINK)),
+    ]);
+    let txt = Paragraph::new(spans).block(block).wrap(Wrap { trim: true });
     f.render_widget(Clear, area);
     f.render_widget(txt, area);
 }

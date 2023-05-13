@@ -15,25 +15,26 @@ impl Control {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Mode {
     Normal,
     Insert,
     Config,
     WannaQuit,
+    BaudInput(String),
 }
 
 impl Mode {
-    pub fn is_insert(self) -> bool {
+    pub fn is_insert(&self) -> bool {
         matches!(self, Self::Insert)
     }
-    pub fn is_normal(self) -> bool {
+    pub fn is_normal(&self) -> bool {
         matches!(self, Self::Normal)
     }
-    pub fn is_config(self) -> bool {
+    pub fn is_config(&self) -> bool {
         matches!(self, Self::Config)
     }
-    pub fn wanna_quit(self) -> bool {
+    pub fn wanna_quit(&self) -> bool {
         matches!(self, Self::WannaQuit)
     }
 }
@@ -70,7 +71,12 @@ impl App {
                 _ => (),
             }
         }
-        is_connected(self.rx.recv(self.serial.as_mut()), &mut self.connected)?;
+        is_connected(
+            self.rx
+                .recv(self.serial.as_mut())
+                .map(|_| Control::Continue),
+            &mut self.connected,
+        )?;
         self.cursor.update(key_pressed);
         Ok(ctl)
     }
@@ -79,7 +85,7 @@ impl App {
     }
     fn handle_key(&mut self, key: KeyEvent) -> Result<Control, io::Error> {
         use KeyCode as K;
-        match self.mode {
+        match &mut self.mode {
             Mode::Insert => match key.code {
                 K::Esc => self.leave_insert(),
                 K::Char(c) => {
@@ -100,12 +106,25 @@ impl App {
                 K::Char('l') => self.tx.lf_crlf = !self.tx.lf_crlf,
                 K::Char('c') => self.rx.display.clear(),
                 K::Char('C') => self.tx.display.clear(),
+                K::Char('b') => self.mode = Mode::BaudInput(String::with_capacity(8)),
 
                 _ => (),
             },
             Mode::WannaQuit => match key.code {
                 K::Esc | K::Char('n' | 'q') => self.mode = Mode::Normal,
                 K::Char('y') => return Ok(Control::Exit),
+                _ => (),
+            },
+            Mode::BaudInput(buf) => match key.code {
+                K::Esc => self.mode = Mode::Normal,
+                K::Char(c @ '0'..='9') => buf.push(c),
+                K::Enter => {
+                    self.serial.set_baud_rate(buf.parse().unwrap())?;
+                    self.mode = Mode::Normal;
+                }
+                K::Backspace => {
+                    buf.pop();
+                }
                 _ => (),
             },
             _ => (),
@@ -126,12 +145,14 @@ impl App {
     }
 }
 
-fn is_connected<T>(res: io::Result<T>, connected: &mut bool) -> io::Result<T> {
-    match &res {
-        Err(e) if e.kind() == io::ErrorKind::NotFound => *connected = false,
-        _ => *connected = true,
+fn is_connected(res: io::Result<Control>, connected: &mut bool) -> io::Result<Control> {
+    match res {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            *connected = false;
+            return Ok(Control::Continue);
+        }
+        res => res,
     }
-    res
 }
 
 enum Cursor {

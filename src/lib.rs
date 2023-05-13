@@ -31,6 +31,7 @@ pub enum Error {
 }
 type Result<T> = std::result::Result<T, Error>;
 
+/// Application entry point
 pub fn run_app() -> Result<()> {
     let args: Args = argh::from_env();
 
@@ -41,24 +42,26 @@ pub fn run_app() -> Result<()> {
             .timeout(Duration::from_millis(500))
             .open()?
     };
-
     let mut terminal = start_tui()?;
-    let mut app = App::new(port);
+    // little trick to replace `try` block
+    let res = (|| {
+        let mut app = App::new(port);
 
-    loop {
-        let ev = if event::poll(Duration::from_millis(1000 / 60))? {
-            Some(event::read()?)
-        } else {
-            None
-        };
-        if app.update(ev)?.exit() {
-            break;
+        loop {
+            let ev = if event::poll(Duration::from_millis(1000 / 60))? {
+                Some(event::read()?)
+            } else {
+                None
+            };
+            if app.update(ev)?.exit() {
+                break;
+            }
+            terminal.draw(|f| ui::draw(f, &mut app))?;
         }
-        terminal.draw(|f| ui::draw(f, &mut app))?;
-    }
-
+        Ok(())
+    })();
     leave_tui(terminal)?;
-    Ok(())
+    res
 }
 
 fn start_tui() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
